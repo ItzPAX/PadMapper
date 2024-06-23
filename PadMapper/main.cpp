@@ -33,9 +33,8 @@ int wmain(const int argc, wchar_t** argv)
 	}
 
 	std::vector<uint8_t> buf;
-	utils::ReadFileToMemory(L"C:\\Users\\Admin\\Desktop\\HelloWorld.sys", &buf);
+	utils::ReadFileToMemory(L"C:\\Users\\Deniz\\Desktop\\HelloWorld.sys", &buf);
 	int result = mapping_utils::MapDriver(iqvw64e_device_handle, winio_device_handle, buf.data());
-
 
 	if (!intel_driver::Unload(iqvw64e_device_handle)) {
 		Log(L"[-] Warning failed to fully unload vulnerable driver " << std::endl);

