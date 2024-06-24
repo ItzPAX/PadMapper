@@ -37,23 +37,6 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 	if (!pt_utils::find_unused_mem(winio_handle, image_pages, intel_driver::ntoskrnlAddr, ntoskrnl_mem_size, pt_start, va, pt_idx))
 		return 0;
 
-	VA va_comp = pt_utils::split_virtual_address(va);
-
-	// insert physical pages into empty pad section
-	ULONG_PTR* physical_pages = (ULONG_PTR*)HeapAlloc(GetProcessHeap(), 0, image_pages * sizeof(ULONG_PTR));
-	pt_utils::allocate_nonpageable_memory(image_pages, physical_pages);
-
-	for (int i = 0; i < image_pages; i++)
-	{
-		PTE new_pte = {};
-		new_pte.Value = 0;
-		new_pte.Present = 1;
-		new_pte.ReadWrite = 1;
-		new_pte.PageFrameNumber = physical_pages[i];
-
-		winio_driver::WritePhysicalMemory(winio_handle, pt_start + ((i + va_comp.pte) * sizeof(uintptr_t)), (uint8_t*)&new_pte, sizeof(new_pte));
-	}
-	
 	uintptr_t kernel_image_map_base = va;
 
 	if (!kernel_image_map_base) {

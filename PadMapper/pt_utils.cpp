@@ -243,51 +243,57 @@ bool pt_utils::find_unused_mem(HANDLE winio, int pages, uintptr_t search_start, 
 		return false;
 	uintptr_t pd_struct = pdpte.PageFrameNumber * 0x1000;
 
-	bool is_first_run = false;
-	bool is_last_run = false;
-	for (int current_pde = _va_start.pde; current_pde <= _va_end.pde; current_pde++)
+	for (int current_pde = 0; current_pde <= 512; current_pde++)
 	{
 		std::cout << "[*] Searching PDE -> " << current_pde << std::endl;
-		is_last_run = (current_pde == _va_end.pde);
-		is_first_run = (current_pde == _va_start.pde);
-
-		if (is_first_run)
-			continue;
 
 		PDE pde;
 		if (!winio_driver::ReadPhysicalMemory(winio, (pd_struct + current_pde * sizeof(uintptr_t)), (uint8_t*)&pde, sizeof(PDE)))
 			return false;
 
-		if (pde.PageSize || !pde.Present)
+		if (pde.PageSize && pde.Present && pde.ReadWrite && !pde.ExecuteDisable)
+		{
+			pt_start = pd_struct;
+			pt_index = current_pde;
+			va = generate_virtual_address(_va_start.pml4e, _va_start.pdpte, current_pde, 0, 0);
+			va += 0xFFFF000000000000;
+
+			std::cout << "LP!\n";
+			std::cout << "PTSTRUCT -> " << pt_start << std::endl;
+			std::cout << "PTIDX -> " << pt_index << std::endl;
+			std::cout << "VA -> " << va << std::endl;
+
+			return false;
+		}
+
+		if (!pde.Present || pde.PageSize)
 			continue;
 
 		uintptr_t pt_struct = pde.PageFrameNumber * 0x1000;
 		
 		int pte_start_index = 0;
 		int pte_end_index = 512;
-		if (is_last_run)
-			pte_end_index = _va_end.pte;
-		else if (is_first_run)
-			pte_start_index = _va_start.pte;
 
-		int consecutive_free_pages = 0;
+		int consecutive_pages = 0;
 		for (int idx = pte_start_index; idx < pte_end_index; idx++)
 		{
 			PTE pte;
 			if (!winio_driver::ReadPhysicalMemory(winio, (pt_struct + idx * sizeof(uintptr_t)), (uint8_t*)&pte, sizeof(PTE)))
 				continue;
 
-			if (pte.Present)
+			if (pte.Present && pte.ReadWrite && !pte.ExecuteDisable)
 			{
-				consecutive_free_pages = 0;
-				continue;
+				consecutive_pages++;
 			}
-			consecutive_free_pages++;
+			else
+			{
+				consecutive_pages = 0;
+			}
 
-			if (consecutive_free_pages == pages - 1)
+			if (consecutive_pages == pages - 1)
 			{
 				pt_start = pt_struct;
-				pt_index = idx - consecutive_free_pages + 1;
+				pt_index = idx - consecutive_pages + 1;
 				va = generate_virtual_address(_va_start.pml4e, _va_start.pdpte, current_pde, pt_index, 0);
 				va += 0xFFFF000000000000;
 
