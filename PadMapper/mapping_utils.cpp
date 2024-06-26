@@ -54,6 +54,8 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 		winio_driver::WritePhysicalMemory(winio_handle, pt_start + ((i + va_comp.pte) * sizeof(uintptr_t)), (uint8_t*)&new_pte, sizeof(new_pte));
 	}
 	
+	system("pause");
+
 	uintptr_t kernel_image_map_base = va;
 
 	if (!kernel_image_map_base) {
@@ -87,6 +89,8 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 
 		RelocateImageByDelta(portable_executable::GetRelocs(local_image_base), kernel_image_map_base - nt_headers->OptionalHeader.ImageBase);
 
+		system("pause");
+
 		if (!FixSecurityCookie(local_image_base, kernel_image_map_base))
 		{
 			Log(L"[-] Failed to fix cookie" << std::endl);
@@ -100,6 +104,8 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 			break;
 		}
 
+		system("pause");
+
 		// Write fixed image to kernel
 		if (!intel_driver::WriteMemory(iqvw64e_device_handle, kernel_image_map_base, local_image_base, image_size))
 		{
@@ -108,10 +114,14 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 			break;
 		}
 
+		system("pause");
+
 		// Call driver entry point
 		const uint64_t address_of_entry_point = kernel_image_map_base + nt_headers->OptionalHeader.AddressOfEntryPoint;
 
 		Log(L"[<] Calling DriverEntry 0x" << reinterpret_cast<void*>(address_of_entry_point) << std::endl);
+
+		system("pause");
 
 		NTSTATUS status = 0;
 		if (!intel_driver::CallKernelFunction(iqvw64e_device_handle, &status, address_of_entry_point, realBase, NULL, intel_driver::ntoskrnlAddr)) {
@@ -121,6 +131,8 @@ uint64_t mapping_utils::MapDriver(HANDLE iqvw64e_device_handle, HANDLE winio_han
 		}
 
 		Log(L"[+] DriverEntry returned 0x" << std::hex << status << std::endl);
+
+		system("pause");
 
 		VirtualFree(local_image_base, 0, MEM_RELEASE);
 		return realBase;
