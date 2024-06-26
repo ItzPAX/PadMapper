@@ -162,8 +162,27 @@ struct PAGE_INFO
 
 namespace pt_utils
 {
+	static uint64_t mal_pte_ind[4];
+	static uint64_t mal_pte_struct[4];
+	static PTE_PFN mal_pte_pfn;
+
+	// banned indices for pte insertion
+	static std::vector<int> banned_pml4_indices;
+	static std::vector<int> banned_pdpt_indices;
+	static std::vector<int> banned_pd_indices;
+	static std::vector<int> banned_pt_indices;
+	static std::vector<FORBIDDEN_ZONE> forbidden_zones;
+
+	// stupid shit because namespaces are shit
+	uintptr_t get_vad_offset();
+
 	// AWE
 	BOOL LoggedSetLockPagesPrivilege(HANDLE hProcess, BOOL bEnable);
+
+	// working set tree
+	uintptr_t get_adjusted_va(BOOLEAN start, VAD_NODE vad);
+	void avl_iterate_over(HANDLE winio_handle, VAD_NODE node, EPROCESS_DATA eproc, uintptr_t dtb);
+	void fill_forbidden_zones(HANDLE winio_handle, EPROCESS_DATA eproc);
 
 	// va utilities
 	VA split_virtual_address(uintptr_t _va);
@@ -171,12 +190,25 @@ namespace pt_utils
 	uint64_t generate_virtual_address(uint64_t pml4, uint64_t pdpt, uint64_t pd, uint64_t pt, uint64_t offset);
 
 	// pt utilities
-	void valid_pml4e(int start, HANDLE winio, uint64_t* pml4ind, uint64_t* pdptstruct, uintptr_t dtb);
-	void valid_pdpte(int start, HANDLE winio, uint64_t pdptstruct, uint64_t* pdpteind, uint64_t* pdstruct);
-	void valid_pde(int start, HANDLE winio, uint64_t pdstruct, uint64_t* pdind, uint64_t* ptstruct);
-	void free_pte(int start, HANDLE winio, uint64_t ptstruct, uint64_t* ptind);
+	void valid_pml4e(HANDLE winio, uint64_t* pml4ind, uint64_t* pdptstruct, uintptr_t dtb);
+	void valid_pdpte(HANDLE winio, uint64_t pdptstruct, uint64_t* pdpteind, uint64_t* pdstruct);
+	void valid_pde(HANDLE winio, uint64_t pdstruct, uint64_t* pdind, uint64_t* ptstruct);
+	void free_pte(HANDLE winio, uint64_t ptstruct, uint64_t* ptind);
+
+	/*
+		inserts a pte that points to a phys addr
+	*/
+	void insert_cusom_pte(HANDLE intel_handle, HANDLE winio_handle, EPROCESS_DATA eproc, uintptr_t point_pa, OUT uintptr_t* local_va);
 
 	uintptr_t allocate_nonpageable_memory(uint64_t pages_to_allocate, uint64_t* pfns);
 
-	bool find_unused_mem(HANDLE winio, int pages, uintptr_t search_start, size_t search_size, uintptr_t& pt_start, uintptr_t& va, uint64_t& pt_index);
+	/* 
+		creates a shadow pml4 that is the same as the specified paging path 
+		the new pml4 however can be modified and only affect one process
+	*/
+	void unlink_page_from_dtb(HANDLE winio_handle, EPROCESS_DATA eproc, int32_t pml4, int32_t pdpte, int32_t pde, int32_t pte);
+	int create_shadow_pml4(HANDLE intel_handle, HANDLE winio_handle, EPROCESS_DATA eproc, int32_t pml4, int32_t pdpte, int32_t pde, int32_t pte, int32_t pages, uint64_t* original_pml4e_pfn, uint64_t* shadow_pml4e_pfn, uintptr_t* original_ptstruct, uintptr_t* shadow_ptstruct, uintptr_t* shadow_va, PAGE_INFO page_info[3]);
+	void swap_pml4e_pfn(HANDLE winio_handle, int32_t pml4, uint64_t new_pfn);
+	void patch_ptes(HANDLE winio_handle, uintptr_t ptstruct, int32_t pte, int32_t pages);
+	void link_pool_to_shadow_table(HANDLE intel_handle, HANDLE winio_handle, uintptr_t ptstruct, int32_t pte, int32_t pages, uintptr_t pool, PAGE_INFO& info);
 }

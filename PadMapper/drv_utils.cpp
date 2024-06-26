@@ -45,7 +45,7 @@ uintptr_t drv_utils::convert_virtual_to_physical(HANDLE winio_handle, uintptr_t 
 	return (PTE & 0xFFFFFFFFFF000) + (va & 0xFFF);
 }
 
-uintptr_t drv_utils::get_pt_from_va(HANDLE winio_handle, uintptr_t va, uintptr_t cr3, bool& lp)
+uintptr_t drv_utils::get_pt_from_va(HANDLE winio_handle, uintptr_t va, uintptr_t cr3)
 {
 	unsigned short PML4 = (unsigned short)((va >> 39) & 0x1FF);
 	uintptr_t PML4E = 0;
@@ -72,7 +72,10 @@ uintptr_t drv_utils::get_pt_from_va(HANDLE winio_handle, uintptr_t va, uintptr_t
 	if (PDE.Present == 0)
 		return 0;
 
-	lp = PDE.PageSize;
+	if ((PDE.Value & (1 << 7)) != 0)
+	{
+		return (PDE.Value & 0xFFFFFFFE00000) + (va & 0x1FFFFF);
+	}
 
 	return PDE.PageFrameNumber * 0x1000;
 }
