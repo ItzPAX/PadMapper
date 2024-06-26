@@ -251,6 +251,9 @@ bool pt_utils::find_unused_mem(HANDLE winio, int pages, uintptr_t search_start, 
 		is_last_run = (current_pde == _va_end.pde);
 		is_first_run = (current_pde == _va_start.pde);
 
+		if (is_first_run)
+			continue;
+
 		PDE pde;
 		if (!winio_driver::ReadPhysicalMemory(winio, (pd_struct + current_pde * sizeof(uintptr_t)), (uint8_t*)&pde, sizeof(PDE)))
 			return false;
