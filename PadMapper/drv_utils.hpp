@@ -37,7 +37,7 @@ namespace drv_utils
 
 	// easy to use interface for drivers
 	uintptr_t convert_virtual_to_physical(HANDLE winio_handle, uintptr_t virtual_address, uintptr_t cr3);
-	uintptr_t get_pt_from_va(HANDLE winio_handle, uintptr_t va, uintptr_t cr3);
+	uintptr_t get_pt_from_va(HANDLE winio_handle, uintptr_t va, uintptr_t cr3, bool& lp);
 
 	void get_eprocess_offsets();
 	bool leak_kpointers(std::vector<uintptr_t>& pointers);
